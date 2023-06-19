@@ -1,0 +1,206 @@
+<template>
+  <div>
+    <el-button type="primary" @click="showEdit('add')" v-if="userInfo.roleType == 1">新增分类</el-button>
+    <Table :columns="columns"
+           :showPagination="false"
+           :dataSource="tableData"
+           :fetch="loadDataList"
+           :options="tableOptions"
+           >
+           <template #cover="{index,row}">
+            <div class="cover">
+              <!-- <img :src="proxy.globalInfo.imageUrl+row.cover"> -->
+              <Cover :cover="row.cover"></Cover>
+            </div>
+           </template>
+           <template #op="{index,row}" v-if="userInfo.roleType == 1">
+            <div class="op">
+              <a href="javascript:void(0)" class="a-link" @click="showEdit('update',row)">修改</a>
+              <el-divider direction="vertical"></el-divider>
+              <a href="javascript:void(0)" class="a-link" @click="del(row)">删除</a>
+              <el-divider direction="vertical"></el-divider>
+              <a href="javascript:void(0)" :class="[index==0?'not-allow':'a-link']" @click="changeSort(index,'up')">上移</a>
+              <el-divider direction="vertical"></el-divider>
+              <a href="javascript:void(0)" :class="[index==tableData.list.length-1?'not-allow':'a-link']" @click="changeSort(index,'down')">下移</a>
+            </div>
+           </template>
+    </Table>
+    <Dialog :show="dialogConfig.show"
+            :title="dialogConfig.title"
+            :buttons="dialogConfig.buttons"
+            width="500px"
+            @close="dialogConfig.show=false">
+            <el-form class="login-form" 
+                        :model="formData"
+                        :rules="rules"
+                        label-width="80px"
+                        ref="formDataRef">
+                  <el-form-item label="名称" prop="categoryName">
+                    <el-input v-model="formData.categoryName" placeholder="请输入名称" >
+                      
+                    </el-input>
+                  </el-form-item>
+                  <el-form-item label="封面" prop="cover">
+                    <CoverUpload v-model="formData.cover"></CoverUpload>
+                  </el-form-item>
+                  <el-form-item label="简介" prop="categoryDesc">
+                    <el-input v-model="formData.categoryDesc" placeholder="请输入简介" type="textarea" :autosize="{minRows:4,maxRows:4}">
+                    </el-input>
+                  </el-form-item>
+          </el-form>
+    </Dialog>
+
+  </div>
+</template>
+
+<script setup>
+import { getCurrentInstance,reactive,ref,nextTick } from "vue";
+const { proxy } = getCurrentInstance();
+
+const api = {
+  "loadDataList": '/category/loadAllCategory4Blog',
+  "saveCategory":'/category/saveCategory4Blog',
+  "delCategory":'/category/delCategory4Blog',
+  "changeSort":'/category/changeCategorySort4Blog'
+}
+
+const userInfo =ref(proxy.VueCookies.get("userInfo") || {})
+
+const columns = [{
+  label:'封面',
+  prop:'cover',
+  width:150,
+  scopedSlots:'cover'
+},
+{
+  label:'名称',
+  prop:'categoryName',
+  width:200
+},
+{
+  label:'简介',
+  prop:'categoryDesc',
+},
+{
+  label:'博客数量',
+  prop:'blogCount',
+  width:200
+},
+{
+  label:'操作',
+  prop:'blogCount',
+  width:230,
+  scopedSlots:'op'
+}
+]
+
+const tableData = reactive({})
+const tableOptions = {
+  extHeight: 10,
+}
+
+const loadDataList = async ()=>{
+  let result = await proxy.request({
+    url:api.loadDataList
+  })
+  if(!result){
+    return
+  }
+  tableData.list = result.data
+}
+
+//新增，修改
+const dialogConfig = reactive({
+  show:false,
+  title:"标题",
+  buttons: [{
+    type:"primary",
+    text:"确定",
+    click:(e)=>{
+      submitForm()
+    }
+  }]
+})
+
+const formData = ref({})
+const rules = {
+  categoryName: [{required:true,message:"请输入分类名称"}]
+}
+const formDataRef = ref()
+const showEdit = (type,data)=>{
+  dialogConfig.show = true
+  nextTick(()=>{
+    formDataRef.value.resetFields();
+    if(type == "add"){
+      dialogConfig.title = "新增分类"
+      formData.value = {}
+    }else if(type == "update"){
+      dialogConfig.title = "编辑分类"
+      formData.value = JSON.parse(JSON.stringify(data))
+    }
+  })
+}
+
+const submitForm = ()=>{
+  formDataRef.value.validate(async (valid)=>{
+    if(!valid){
+      return
+    }
+    let params = {}
+    Object.assign(params, formData.value)
+    let result = await proxy.request({
+      url: api.saveCategory,
+      params,
+    })
+    if(!result){
+      return
+    }
+    dialogConfig.show =false
+    proxy.message.success("保存成功")
+    loadDataList()
+  })
+}
+
+
+//删除
+const del = (data)=>{
+  console.log(data);
+  proxy.Confirm(`你确定要删除${data.categoryName}吗`,async ()=>{
+    let result = await proxy.request({
+      url: api.delCategory,
+      params:{
+        categoryId: data.categoryId
+      }
+    })
+    if(!result){
+      return
+    }
+    loadDataList();
+  })
+}
+
+//上移，下移
+const changeSort = async (index,type) =>{
+  let categoryList = tableData.list;
+  if(type === "down" && index === categoryList.length-1 || type === "up" && index === 0){
+    return;
+  }
+  let temp = categoryList[index];
+  let number = type == "down" ? 1 : -1
+  categoryList.splice(index,1)
+  categoryList.splice(index + number,0, temp);
+  let result = await proxy.request({
+    url: api.changeSort,
+    dataType:"json",
+    params:categoryList,
+  })
+  if(!result){
+    return
+  }
+  proxy.message.success("重新排序成功")
+  loadDataList();
+}
+</script>
+
+<style lang="scss" scoped>
+</style>
